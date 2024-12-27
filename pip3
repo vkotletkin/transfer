@@ -1,0 +1,7 @@
+У себя на компе в работающем проекта  
+Активируешь окружение
+pip freeze >requirements.txt
+mkdir wheels
+pip wheel -w wheels/ -r requirements.txt
+Создаёшь новый проект на рабочем компе с той же версией python
+pip install --no-index -f wheels/ -r requirements.txt
