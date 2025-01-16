@@ -1,5 +1,15 @@
-https://disk.yandex.ru/d/sVqBnWnUzwm4-g
+https://www.baeldung.com/java-thread-safety
 
-https://disk.yandex.ru/d/nypVwsiRGlCzTQ
+https://www.baeldung.com/thread-pool-java-and-guava
 
-https://disk.yandex.ru/d/mLpU4BGMfQcCUg
+https://docs.spring.io/spring-framework/reference/integration/rest-clients.html#rest-restclient
+
+https://habr.com/ru/companies/spring_aio/articles/824328/
+
+https://habr.com/ru/companies/spring_aio/articles/824328/
+
+https://habr.com/ru/articles/693244/
+
+https://habr.com/ru/companies/spring_aio/articles/862950/
+
+https://davidvlijmincx.com/posts/use-executorservice-with-virtual-threads/
