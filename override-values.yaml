@@ -1,0 +1,81 @@
+global:
+  cloud: others
+  clusterName: main-cluster
+  deploymentEnvironment: prod
+
+otelCollectorEndpoint: 192.168.207.128:4317
+otelInsecure: true
+
+presets:
+  # Exporters
+  otlpExporter:
+    enabled: true
+  loggingExporter:
+    enabled: true
+  prometheus:
+    enabled: true
+
+  # Logs Collection - ПРОСТОЙ BLACKLIST ПО ИМЕНАМ PODS
+  logsCollection:
+    enabled: true
+    blacklist:
+      enabled: true
+      namespaces:
+        - kube-system
+      pods:
+        - "*-otel-nologs-*"           # все поды с -nologs- в имени
+        - "*-otld-*"
+      containers: []
+      additionalExclude: []
+      signozLogs: true
+
+  # Metrics Collection
+  hostMetrics:
+    enabled: true
+    collectionInterval: 30s
+
+  kubeletMetrics:
+    enabled: true
+    collectionInterval: 30s
+
+  clusterMetrics:
+    enabled: true
+    collectionInterval: 30s
+
+  # Kubernetes Attributes
+  kubernetesAttributes:
+    enabled: true
+    extractMetadatas:
+      - k8s.namespace.name
+      - k8s.deployment.name
+      - k8s.pod.name
+      - k8s.node.name
+
+  # Resource Detection
+  resourceDetection:
+    enabled: true
+
+# OTel Agent Configuration
+otelAgent:
+  enabled: true
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1024Mi
+    limits:
+      cpu: 2000m
+      memory: 2048Mi
+
+# OTel Deployment Configuration
+otelDeployment:
+  enabled: true
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1024Mi
+    limits:
+      cpu: 2000m
+      memory: 2048Mi
+
+insecureSkipVerify: true
+signozApiKey: ""

@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telemetry-otel-nologs-with-sdk
+  namespace: otel-example-signoz
+  labels:
+    app: telemetry-otel-nologs-with-sdk
+    version: "1.0.0-WITH-SDK"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: telemetry-otel-nologs-with-sdk
+  template:
+    metadata:
+      labels:
+        app: telemetry-otel-nologs-with-sdk
+        version: "1.0.0-WITH-SDK"
+    spec:
+      containers:
+        - name: telemetry-otel-nologs-with-sdk
+          image: nkhzrd/telemetry-kotletkin-guide:1.0.0-WITH-SDK
+          ports:
+            - containerPort: 8080  # ✅ Добавьте это для открытия порта
+          env:
+            # ✅ Затем используем их в OTEL конфигурации
+            - name: OTEL_SERVICE_NAME
+              value: "telemetry-application-with-sdk"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://signoz-k8s-infra-otel-agent.signoz:4318"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+
+            # Exporters (metrics and traces only)
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_LOGS_EXPORTER
+              value: "otlp"
+
+            # Sampling
+            - name: OTEL_TRACES_SAMPLER
+              value: "parentbased_traceidratio"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "1.0"
+
+            # Resource Attributes
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "deployment.environment=production-new"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-telemetry-otel-nologs-with-sdk
+  namespace: otel-example-signoz
+  labels:
+    app: svc-telemetry-otel-nologs-with-sdk
+spec:
+  selector:
+    app: telemetry-otel-nologs-with-sdk
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

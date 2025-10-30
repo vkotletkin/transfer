@@ -1,0 +1,1063 @@
+---
+# Source: k8s-infra/templates/otel-agent/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: signoz-k8s-infra-otel-agent
+  namespace: signoz
+  labels:
+    helm.sh/chart: k8s-infra-0.14.1
+    app.kubernetes.io/version: "0.109.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-agent
+---
+# Source: k8s-infra/templates/otel-deployment/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: signoz-k8s-infra-otel-deployment
+  namespace: signoz
+  labels:
+    helm.sh/chart: k8s-infra-0.14.1
+    app.kubernetes.io/version: "0.109.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-deployment
+---
+# Source: k8s-infra/templates/otel-agent/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signoz-k8s-infra-otel-agent
+  namespace: signoz
+  labels:
+    helm.sh/chart: k8s-infra-0.14.1
+    app.kubernetes.io/version: "0.109.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-agent
+data:
+  otel-agent-config.yaml: |-
+    
+    exporters:
+      debug:
+        sampling_initial: 
+        sampling_thereafter: 
+        verbosity: 
+      otlp:
+        endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
+        headers:
+          signoz-access-token: ${env:SIGNOZ_API_KEY}
+        tls:
+          insecure: ${env:OTEL_EXPORTER_OTLP_INSECURE}
+          insecure_skip_verify: ${env:OTEL_EXPORTER_OTLP_INSECURE_SKIP_VERIFY}
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: localhost:1777
+      zpages:
+        endpoint: localhost:55679
+    processors:
+      batch:
+        send_batch_size: 10000
+        timeout: 200ms
+      k8sattributes:
+        extract:
+          annotations: []
+          labels: []
+          metadata:
+          - k8s.namespace.name
+          - k8s.deployment.name
+          - k8s.pod.name
+          - k8s.node.name
+        filter:
+          node_from_env_var: K8S_NODE_NAME
+        passthrough: false
+        pod_association:
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.ip
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+        - sources:
+          - from: connection
+      resource/deployenv:
+        attributes:
+        - action: insert
+          key: deployment.environment
+          value: ${env:DEPLOYMENT_ENVIRONMENT}
+      resourcedetection:
+        detectors:
+        - k8snode
+        - env
+        - system
+        k8snode:
+          auth_type: serviceAccount
+          node_from_env_var: K8S_NODE_NAME
+        override: false
+        system:
+          resource_attributes:
+            host.id:
+              enabled: false
+            host.name:
+              enabled: false
+            os.type:
+              enabled: true
+        timeout: 2s
+    receivers:
+      filelog/k8s:
+        exclude:
+        - /var/log/pods/signoz_signoz-k8s-infra*-signoz-*/*/*.log
+        - /var/log/pods/signoz_signoz-k8s-infra*-k8s-infra-*/*/*.log
+        - /var/log/pods/kube-system_*/*/*.log
+        - /var/log/pods/*_*-otel-nologs-**_*/*/*.log
+        - /var/log/pods/*_*-otld-**_*/*/*.log
+        include:
+        - /var/log/pods/*/*/*.log
+        include_file_name: false
+        include_file_path: true
+        operators:
+        - id: container-parser
+          type: container
+        start_at: end
+      hostmetrics:
+        collection_interval: 30s
+        root_path: /hostfs
+        scrapers:
+          cpu: {}
+          disk:
+            exclude:
+              devices:
+              - ^ram\d+$
+              - ^zram\d+$
+              - ^loop\d+$
+              - ^fd\d+$
+              - ^hd[a-z]\d+$
+              - ^sd[a-z]\d+$
+              - ^vd[a-z]\d+$
+              - ^xvd[a-z]\d+$
+              - ^nvme\d+n\d+p\d+$
+              match_type: regexp
+          filesystem:
+            exclude_fs_types:
+              fs_types:
+              - autofs
+              - binfmt_misc
+              - bpf
+              - cgroup2?
+              - configfs
+              - debugfs
+              - devpts
+              - devtmpfs
+              - fusectl
+              - hugetlbfs
+              - iso9660
+              - mqueue
+              - nsfs
+              - overlay
+              - proc
+              - procfs
+              - pstore
+              - rpc_pipefs
+              - securityfs
+              - selinuxfs
+              - squashfs
+              - sysfs
+              - tracefs
+              match_type: strict
+            exclude_mount_points:
+              match_type: regexp
+              mount_points:
+              - /dev/*
+              - /proc/*
+              - /sys/*
+              - /run/credentials/*
+              - /run/k3s/containerd/*
+              - /var/lib/docker/*
+              - /var/lib/containers/storage/*
+              - /var/lib/kubelet/*
+              - /snap/*
+          load: {}
+          memory: {}
+          network:
+            exclude:
+              interfaces:
+              - ^veth.*$
+              - ^docker.*$
+              - ^br-.*$
+              - ^flannel.*$
+              - ^cali.*$
+              - ^cbr.*$
+              - ^cni.*$
+              - ^dummy.*$
+              - ^tailscale.*$
+              - ^lo$
+              match_type: regexp
+      kubeletstats:
+        auth_type: serviceAccount
+        collection_interval: 30s
+        endpoint: ${env:K8S_HOST_IP}:10250
+        extra_metadata_labels:
+        - container.id
+        - k8s.volume.type
+        insecure_skip_verify: true
+        metric_groups:
+        - container
+        - pod
+        - node
+        - volume
+        metrics:
+          container.cpu.usage:
+            enabled: true
+          container.uptime:
+            enabled: true
+          k8s.container.cpu_limit_utilization:
+            enabled: true
+          k8s.container.cpu_request_utilization:
+            enabled: true
+          k8s.container.memory_limit_utilization:
+            enabled: true
+          k8s.container.memory_request_utilization:
+            enabled: true
+          k8s.node.cpu.usage:
+            enabled: true
+          k8s.node.uptime:
+            enabled: true
+          k8s.pod.cpu.usage:
+            enabled: true
+          k8s.pod.cpu_limit_utilization:
+            enabled: true
+          k8s.pod.cpu_request_utilization:
+            enabled: true
+          k8s.pod.memory_limit_utilization:
+            enabled: true
+          k8s.pod.memory_request_utilization:
+            enabled: true
+          k8s.pod.uptime:
+            enabled: true
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+            max_recv_msg_size_mib: 4
+          http:
+            endpoint: 0.0.0.0:4318
+    service:
+      extensions:
+      - health_check
+      - zpages
+      - pprof
+      pipelines:
+        logs:
+          exporters:
+          - debug
+          - otlp
+          processors:
+          - resource/deployenv
+          - resourcedetection
+          - k8sattributes
+          - batch
+          receivers:
+          - otlp
+          - filelog/k8s
+        metrics:
+          exporters:
+          - otlp
+          - debug
+          processors:
+          - resource/deployenv
+          - resourcedetection
+          - k8sattributes
+          - batch
+          receivers:
+          - otlp
+          - hostmetrics
+          - kubeletstats
+        traces:
+          exporters:
+          - otlp
+          - debug
+          processors:
+          - resource/deployenv
+          - resourcedetection
+          - k8sattributes
+          - batch
+          receivers:
+          - otlp
+      telemetry:
+        logs:
+          encoding: json
+        metrics:
+          address: 0.0.0.0:8888
+---
+# Source: k8s-infra/templates/otel-deployment/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signoz-k8s-infra-otel-deployment
+  namespace: signoz
+  labels:
+    helm.sh/chart: k8s-infra-0.14.1
+    app.kubernetes.io/version: "0.109.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-deployment
+data:
+  otel-deployment-config.yaml: |-
+    
+    exporters:
+      debug:
+        sampling_initial: 
+        sampling_thereafter: 
+        verbosity: 
+      otlp:
+        endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
+        headers:
+          signoz-access-token: ${env:SIGNOZ_API_KEY}
+        tls:
+          insecure: ${env:OTEL_EXPORTER_OTLP_INSECURE}
+          insecure_skip_verify: ${env:OTEL_EXPORTER_OTLP_INSECURE_SKIP_VERIFY}
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: localhost:1777
+      zpages:
+        endpoint: localhost:55679
+    processors:
+      batch:
+        send_batch_size: 10000
+        timeout: 1s
+      k8sattributes:
+        extract:
+          metadata:
+          - k8s.namespace.name
+          - k8s.deployment.name
+          - k8s.pod.name
+          - k8s.node.name
+        passthrough: false
+        pod_association:
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.ip
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+        - sources:
+          - from: connection
+      resource/deployenv:
+        attributes:
+        - action: insert
+          key: deployment.environment
+          value: ${env:DEPLOYMENT_ENVIRONMENT}
+      resourcedetection:
+        detectors:
+        - env
+        override: false
+        timeout: 2s
+    receivers:
+      k8s_cluster:
+        allocatable_types_to_report:
+        - cpu
+        - memory
+        collection_interval: 30s
+        metrics:
+          k8s.node.condition:
+            enabled: true
+          k8s.pod.status_reason:
+            enabled: true
+        node_conditions_to_report:
+        - Ready
+        - MemoryPressure
+        - DiskPressure
+        - PIDPressure
+        - NetworkUnavailable
+        resource_attributes:
+          container.runtime:
+            enabled: true
+          container.runtime.version:
+            enabled: true
+          k8s.container.status.last_terminated_reason:
+            enabled: true
+          k8s.kubelet.version:
+            enabled: true
+          k8s.pod.qos_class:
+            enabled: true
+      k8s_events:
+        auth_type: serviceAccount
+      prometheus/scraper:
+        config:
+          scrape_configs:
+          - job_name: signoz-scraper
+            kubernetes_sd_configs:
+            - role: pod
+            relabel_configs:
+            - action: keep
+              regex: true
+              source_labels:
+              - __meta_kubernetes_pod_annotation_signoz_io_scrape
+            - action: replace
+              regex: (.+)
+              source_labels:
+              - __meta_kubernetes_pod_annotation_signoz_io_path
+              target_label: __metrics_path__
+            - action: replace
+              separator: ':'
+              source_labels:
+              - __meta_kubernetes_pod_ip
+              - __meta_kubernetes_pod_annotation_signoz_io_port
+              target_label: __address__
+            - replacement: signoz-scraper
+              target_label: job_name
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_name
+              target_label: signoz_k8s_name
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_instance
+              target_label: signoz_k8s_instance
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_component
+              target_label: signoz_k8s_component
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_namespace
+              target_label: k8s_namespace_name
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_name
+              target_label: k8s_pod_name
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_uid
+              target_label: k8s_pod_uid
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_node_name
+              target_label: k8s_node_name
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_ready
+              target_label: k8s_pod_ready
+            - action: replace
+              source_labels:
+              - __meta_kubernetes_pod_phase
+              target_label: k8s_pod_phase
+            scrape_interval: 60s
+    service:
+      extensions:
+      - health_check
+      - zpages
+      - pprof
+      pipelines:
+        logs:
+          exporters:
+          - debug
+          - otlp
+          processors:
+          - resource/deployenv
+          - k8sattributes
+          - resourcedetection
+          - batch
+          receivers:
+          - k8s_events
+        metrics/internal:
+          exporters:
+          - otlp
+          - debug
+          processors:
+          - resource/deployenv
+          - k8sattributes
+          - resourcedetection
+          - batch
+          receivers:
+          - k8s_cluster
+        metrics/scraper:
+          exporters:
+          - otlp
+          - debug
+          processors:
+          - resource/deployenv
+          - resourcedetection
+          - batch
+          receivers:
+          - prometheus/scraper
+      telemetry:
+        logs:
+          encoding: json
+        metrics:
+          address: 0.0.0.0:8888
+---
+# Source: k8s-infra/templates/otel-agent/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: signoz-k8s-infra-otel-agent-signoz
+  namespace: signoz
+rules:
+  
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    - namespaces
+    - nodes
+    - persistentvolumeclaims
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - apps
+    resources:
+    - replicasets
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - extensions
+    resources:
+    - replicasets
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - nodes
+    - endpoints
+    verbs:
+    - list
+    - watch
+  - apiGroups:
+    - batch
+    resources:
+    - jobs
+    verbs:
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - nodes/proxy
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    resources:
+    - nodes/stats
+    - configmaps
+    - events
+    verbs:
+    - create
+    - get
+  - apiGroups:
+    - ""
+    resourceNames:
+    - otel-container-insight-clusterleader
+    resources:
+    - configmaps
+    verbs:
+    - get
+    - update
+---
+# Source: k8s-infra/templates/otel-deployment/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: signoz-k8s-infra-otel-deployment-signoz
+  namespace: signoz
+rules:
+  - apiGroups:
+    - ""
+    resources:
+    - events
+    - namespaces
+    - namespaces/status
+    - nodes
+    - nodes/spec
+    - pods
+    - pods/status
+    - replicationcontrollers
+    - replicationcontrollers/status
+    - resourcequotas
+    - services
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - apps
+    resources:
+    - daemonsets
+    - deployments
+    - replicasets
+    - statefulsets
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - extensions
+    resources:
+    - daemonsets
+    - deployments
+    - replicasets
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - batch
+    resources:
+    - jobs
+    - cronjobs
+    verbs:
+    - get
+    - list
+    - watch
+  - apiGroups:
+    - autoscaling
+    resources:
+    - horizontalpodautoscalers
+    verbs:
+    - get
+    - list
+    - watch
+---
+# Source: k8s-infra/templates/otel-agent/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: signoz-k8s-infra-otel-agent-signoz
+  namespace: signoz
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: signoz-k8s-infra-otel-agent-signoz
+subjects:
+  - name: signoz-k8s-infra-otel-agent
+    kind: ServiceAccount
+    namespace: signoz
+---
+# Source: k8s-infra/templates/otel-deployment/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: signoz-k8s-infra-otel-deployment-signoz
+  namespace: signoz
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: signoz-k8s-infra-otel-deployment-signoz
+subjects:
+  - name: signoz-k8s-infra-otel-deployment
+    kind: ServiceAccount
+    namespace: signoz
+---
+# Source: k8s-infra/templates/otel-agent/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: signoz-k8s-infra-otel-agent
+  namespace: signoz
+  labels:
+    helm.sh/chart: k8s-infra-0.14.1
+    app.kubernetes.io/version: "0.109.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-agent
+spec:
+  type: ClusterIP
+  ports:
+    
+    - name: health-check
+      port: 13133
+      targetPort: health-check
+      protocol: TCP
+      nodePort: null
+    - name: metrics
+      port: 8888
+      targetPort: metrics
+      protocol: TCP
+      nodePort: null
+    - name: otlp
+      port: 4317
+      targetPort: otlp
+      protocol: TCP
+      nodePort: null
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-agent
+  internalTrafficPolicy: Local
+---
+# Source: k8s-infra/templates/otel-deployment/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: signoz-k8s-infra-otel-deployment
+  namespace: signoz
+  labels:
+    helm.sh/chart: k8s-infra-0.14.1
+    app.kubernetes.io/version: "0.109.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-deployment
+spec:
+  type: ClusterIP
+  ports:
+    
+    - name: health-check
+      port: 13133
+      targetPort: health-check
+      protocol: TCP
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-deployment
+---
+# Source: k8s-infra/templates/otel-agent/daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: signoz-k8s-infra-otel-agent
+  namespace: signoz
+  labels:
+    helm.sh/chart: k8s-infra-0.14.1
+    app.kubernetes.io/version: "0.109.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-infra
+      app.kubernetes.io/instance: signoz-k8s-infra
+      app.kubernetes.io/component: otel-agent
+  minReadySeconds: 5
+  template:
+    metadata:
+      annotations:
+        checksum/config: a7eb438d03e20fe14d67d692db0f58c452a84bd90b82b915f0c9bf1471ae54e7
+      labels:
+        app.kubernetes.io/name: k8s-infra
+        app.kubernetes.io/instance: signoz-k8s-infra
+        app.kubernetes.io/component: otel-agent
+    spec:      
+      serviceAccountName: signoz-k8s-infra-otel-agent
+      securityContext:
+        {}
+      priorityClassName: ""
+      tolerations:
+        - operator: Exists
+      volumes:
+        - name: otel-agent-config-vol
+          configMap:
+            name: signoz-k8s-infra-otel-agent
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: hostfs
+          hostPath:
+            path: /
+      hostNetwork: false
+      containers:
+        - name: signoz-k8s-infra-otel-agent
+          image: docker.io/otel/opentelemetry-collector-contrib:0.109.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: health-check
+              containerPort: 13133
+              protocol: TCP
+              hostPort: 13133
+            - name: metrics
+              containerPort: 8888
+              protocol: TCP
+              hostPort: 8888
+            - name: otlp
+              containerPort: 4317
+              protocol: TCP
+              hostPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+              hostPort: 4318
+          command:
+            - "/otelcol-contrib"
+          args:
+            - "--config=/conf/otel-agent-config.yaml"
+          env:
+            
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: 192.168.207.128:4317
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+            - name: OTEL_EXPORTER_OTLP_INSECURE_SKIP_VERIFY
+              value: "true"
+            - name: OTEL_SECRETS_PATH
+              value: /secrets
+            - name: K8S_CLUSTER_NAME
+              value: main-cluster
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: prod
+            
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+            - name: K8S_HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SIGNOZ_COMPONENT
+              value: otel-agent
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "signoz.component=$(SIGNOZ_COMPONENT),k8s.cluster.name=$(K8S_CLUSTER_NAME),k8s.node.name=$(K8S_NODE_NAME),host.name=$(K8S_NODE_NAME)"
+            
+          securityContext:
+            {}
+          volumeMounts:
+            - name: otel-agent-config-vol
+              mountPath: /conf
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: hostfs
+              mountPath: /hostfs
+              readOnly: true
+              mountPropagation: HostToContainer
+          livenessProbe:
+            httpGet:
+              port: 13133
+              path: /
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              port: 13133
+              path: /
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 2048Mi
+            requests:
+              cpu: 1000m
+              memory: 1024Mi
+---
+# Source: k8s-infra/templates/otel-deployment/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signoz-k8s-infra-otel-deployment
+  namespace: signoz
+  labels:
+    helm.sh/chart: k8s-infra-0.14.1
+    app.kubernetes.io/version: "0.109.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-deployment
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-infra
+      app.kubernetes.io/instance: signoz-k8s-infra
+      app.kubernetes.io/component: otel-deployment
+  minReadySeconds: 5
+  progressDeadlineSeconds: 120
+  replicas: 
+  template:
+    metadata:
+      annotations:
+        checksum/config: a8c7a88e9f35fbf27510be3094ab149f25a546edf471b3f01555ae69f3cafa3d
+      labels:
+        app.kubernetes.io/name: k8s-infra
+        app.kubernetes.io/instance: signoz-k8s-infra
+        app.kubernetes.io/component: otel-deployment
+    spec:      
+      serviceAccountName: signoz-k8s-infra-otel-deployment
+      securityContext:
+        {}
+      priorityClassName: ""
+      volumes:
+        - name: otel-deployment-config-vol
+          configMap:
+            name: signoz-k8s-infra-otel-deployment
+      containers:
+        - name: signoz-k8s-infra-otel-deployment
+          image: docker.io/otel/opentelemetry-collector-contrib:0.109.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: health-check
+              containerPort: 13133
+              protocol: TCP
+          command:
+            - "/otelcol-contrib"
+          args:
+            - "--config=/conf/otel-deployment-config.yaml"
+          securityContext:
+            {}
+          env:
+            
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: 192.168.207.128:4317
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "true"
+            - name: OTEL_EXPORTER_OTLP_INSECURE_SKIP_VERIFY
+              value: "true"
+            - name: OTEL_SECRETS_PATH
+              value: /secrets
+            - name: K8S_CLUSTER_NAME
+              value: main-cluster
+            - name: DEPLOYMENT_ENVIRONMENT
+              value: prod
+            
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+            - name: K8S_HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SIGNOZ_COMPONENT
+              value: otel-deployment
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: signoz.component=$(SIGNOZ_COMPONENT),k8s.cluster.name=$(K8S_CLUSTER_NAME)
+            
+          volumeMounts:
+            - name: otel-deployment-config-vol
+              mountPath: /conf
+          livenessProbe:
+            httpGet:
+              port: 13133
+              path: /
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              port: 13133
+              path: /
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 2048Mi
+            requests:
+              cpu: 1000m
+              memory: 1024Mi
+---
+# Source: k8s-infra/templates/otel-agent/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "signoz-k8s-infra-otel-agent-test-connection"
+  namespace: signoz
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: docker.io/busybox:1.35
+      command: ['wget']
+      args: ['signoz-k8s-infra-otel-agent:13133']
+  restartPolicy: Never
+---
+# Source: k8s-infra/templates/otel-deployment/tests/test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "signoz-k8s-infra-otel-deployment-test-connection"
+  namespace: signoz
+  labels:
+    helm.sh/chart: k8s-infra-0.14.1
+    app.kubernetes.io/version: "0.109.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: k8s-infra
+    app.kubernetes.io/instance: signoz-k8s-infra
+    app.kubernetes.io/component: otel-deployment
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: docker.io/busybox:1.35
+      command: ['wget']
+      args: ['signoz-k8s-infra-otel-deployment:13133']
+  restartPolicy: Never

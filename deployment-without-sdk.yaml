@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telemetry-without-sdk
+  namespace: otel-example-signoz
+  labels:
+    app: telemetry-without-sdk
+    version: "1.0.0-WITHOUT-SDK"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: telemetry-without-sdk
+  template:
+    metadata:
+      labels:
+        app: telemetry-without-sdk
+        version: "1.0.0-WITHOUT-SDK"
+    spec:
+      containers:
+        - name: telemetry-without-sdk
+          image: nkhzrd/telemetry-kotletkin-guide:1.0.0-WITHOUT-SDK
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-telemetry-without-sdk
+  namespace: otel-example-signoz
+  labels:
+    app: svc-telemetry-without-sdk
+spec:
+  selector:
+    app: telemetry-without-sdk
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP
